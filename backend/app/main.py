@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 APP_VERSION = "1.0.0"
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 app = FastAPI(title="AgentForge API", version=APP_VERSION, description="Structured AI engineering workflow API")
