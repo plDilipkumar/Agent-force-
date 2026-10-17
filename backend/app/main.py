@@ -142,7 +142,7 @@ CONTEXT:
 {req.context or "(none)"}"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     async with httpx.AsyncClient(timeout=httpx.Timeout(35.0, connect=8.0)) as client:
-        response = await client.post(url, params={"key": API_KEY}, json={
+        response = await client.post(url, headers={"x-goog-api-key": API_KEY}, json={
             "contents":[{"parts":[{"text":prompt}]}],
             "generationConfig":{"responseMimeType":"application/json","responseSchema":schema}
         })
