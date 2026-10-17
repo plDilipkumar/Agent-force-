@@ -168,6 +168,10 @@ CONTEXT:
     data["duration_ms"] = int((time.perf_counter()-started)*1000)
     return data
 
+@app.get("/")
+async def root():
+    return {"service":"AgentForge API","health":"/health","docs":"/docs","version":APP_VERSION}
+
 @app.get("/health")
 async def health():
     return {"status":"ok","service":"agentforge-api","version":APP_VERSION,"ai_configured":bool(API_KEY)}
