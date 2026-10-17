@@ -29,7 +29,7 @@ npm run dev
 Set `VITE_API_BASE_URL` to the backend URL (default local API: http://localhost:8000).
 
 ## Deploy
-1. Deploy `backend` as a Render Python web service: root directory `backend`, build command `pip install -r requirements.txt`, start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+1. Deploy the repository root as a Render Python web service: build command `pip install -r requirements.txt`, start command `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. The root entrypoint forwards to `backend/app/main.py`.
 2. Deploy `frontend` as a Vercel Vite project with root directory `frontend`, build command `npm run build`, output directory `dist`. Set `VITE_API_BASE_URL` to the Render API URL and redeploy.
 3. In Render, add `GEMINI_API_KEY` under the backend service's Environment settings. Never put the key in GitHub or any `VITE_*` variable.
 
