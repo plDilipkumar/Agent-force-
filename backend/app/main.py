@@ -144,12 +144,20 @@ CONTEXT:
     async with httpx.AsyncClient(timeout=httpx.Timeout(35.0, connect=8.0)) as client:
         response = await client.post(url, params={"key": API_KEY}, json={
             "contents":[{"parts":[{"text":prompt}]}],
-            "generationConfig":{"temperature":0.25,"responseMimeType":"application/json","responseSchema":schema}
+            "generationConfig":{"responseMimeType":"application/json","responseSchema":schema}
         })
     if response.status_code == 429:
         raise HTTPException(429, "Gemini rate limit reached. Wait a moment or use demo mode.")
     if response.status_code >= 400:
-        raise HTTPException(502, "Gemini provider error. Check the Render environment key and model availability.")
+        # Log only provider status and a bounded error body; never log the API key or request URL.
+        try:
+            provider_error = response.json().get("error", {})
+            provider_message = str(provider_error.get("message", "No provider message"))[:500]
+            provider_code = provider_error.get("status", "unknown")
+        except (ValueError, AttributeError):
+            provider_message, provider_code = "Unparseable provider response", "unknown"
+        print(f"Gemini API error: http_status={response.status_code} code={provider_code} message={provider_message}")
+        raise HTTPException(502, f"Gemini provider rejected the request (HTTP {response.status_code}, {provider_code}). Check Render GEMINI_API_KEY permissions/quota and GEMINI_MODEL.")
     payload = response.json()
     try:
         raw = payload["candidates"][0]["content"]["parts"][0]["text"]
