@@ -196,3 +196,7 @@ async def create_run(req: RunRequest):
         raise HTTPException(504, "Gemini request timed out. Retry with a shorter task.")
     except httpx.RequestError:
         raise HTTPException(502, "Could not reach the Gemini API. Try again shortly.")
+
+# Register the separately bounded artifact-generation endpoint.
+from app.artifacts import router as artifacts_router
+app.include_router(artifacts_router)
