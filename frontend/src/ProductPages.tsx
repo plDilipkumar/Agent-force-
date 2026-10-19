@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Box, CheckCircle2, CircleHelp, Clock3, Code2, FolderKanban, KeyRound, Layers3, Plus, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import { Activity, ArrowRight, CheckCircle2, CircleHelp, Clock3, Code2, FolderKanban, KeyRound, Layers3, Plus, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 
 type HistoryItem = { id: string; summary: string; created_at: string; provider?: string; mode?: string; tasks?: { title: string; priority: string }[] };
 type ArtifactInfo = { artifact_id: string; filename: string; created_at: string; provider: string; verification_status: string; safety_notice: string } | null;
