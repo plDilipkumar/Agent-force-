@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from typing import Literal
 
@@ -152,11 +153,12 @@ CONTEXT:
         # Log only provider status and a bounded error body; never log the API key or request URL.
         try:
             provider_error = response.json().get("error", {})
-            provider_message = str(provider_error.get("message", "No provider message"))[:500]
-            provider_code = provider_error.get("status", "unknown")
+            raw_code = str(provider_error.get("status", "unknown"))
+            provider_code = raw_code if re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", raw_code) else "unknown"
         except (ValueError, AttributeError):
-            provider_message, provider_code = "Unparseable provider response", "unknown"
-        print(f"Gemini API error: http_status={response.status_code} code={provider_code} message={provider_message}")
+            provider_code = "unknown"
+        # Provider messages may contain sensitive diagnostics; never copy response bodies to logs.
+        print(f"Gemini API error: http_status={response.status_code} code={provider_code}")
         raise HTTPException(502, f"Gemini provider rejected the request (HTTP {response.status_code}, {provider_code}). Check Render GEMINI_API_KEY permissions/quota and GEMINI_MODEL.")
     payload = response.json()
     try:
