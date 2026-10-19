@@ -38,3 +38,9 @@ Set `VITE_API_BASE_URL` to the backend URL (default local API: http://localhost:
 - Every run labels its provider/mode. Demo-mode results are explicitly identified.
 - The verification checklist is a plan, not a claim that tests were executed.
 - Input and output lengths are bounded. API keys remain on the server.
+
+## Reviewable code artifacts (feature branch)
+
+The feature branch adds `POST /api/artifacts`, which asks Gemini for a bounded Python source file and a separate pytest file. The endpoint returns `verification_status: not_executed`; it does not run generated code inside the API process. A configured backend `GEMINI_API_KEY` is required for artifact generation; the deterministic planning demo remains available without it.
+
+**Current limitation:** artifact execution in an isolated CI sandbox is not yet part of the verified end-to-end workflow. Treat generated files as untrusted suggestions and review them before use. Do not interpret the suggested pytest file or verification checklist as evidence that tests have run.
