@@ -123,3 +123,78 @@ def test_artifact_rejects_unsafe_generated_filename(monkeypatch):
 
     assert response.status_code == 502
     assert "unsafe artifact filename" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_status"),
+    [(429, 429), (403, 502), (500, 502)],
+)
+def test_artifact_provider_http_failures_are_bounded_and_do_not_leak_body(
+    monkeypatch, capsys, status_code, expected_status
+):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+
+    class FakeResponse:
+        def __init__(self):
+            self.status_code = status_code
+
+        def json(self):
+            return {"error": {"message": "sensitive-provider-detail test-secret"}}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(artifacts.httpx, "AsyncClient", FakeClient)
+    response = client.post(
+        "/api/artifacts",
+        json={"task": "Create a simple addition function and pytest cases."},
+    )
+
+    assert response.status_code == expected_status
+    assert "test-secret" not in response.text
+    assert "sensitive-provider-detail" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("exception", "expected_status"),
+    [
+        (httpx.ReadTimeout("test-secret"), 504),
+        (httpx.ConnectError("test-secret"), 502),
+    ],
+)
+def test_artifact_provider_transport_failures_are_sanitized(
+    monkeypatch, exception, expected_status
+):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, *args, **kwargs):
+            raise exception
+
+    monkeypatch.setattr(artifacts.httpx, "AsyncClient", FakeClient)
+    response = client.post(
+        "/api/artifacts",
+        json={"task": "Create a simple addition function and pytest cases."},
+    )
+
+    assert response.status_code == expected_status
+    assert "test-secret" not in response.text
