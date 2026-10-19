@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
+
+from fastapi.testclient import TestClient
 
 
 def test_render_root_entrypoint_imports_artifact_route(monkeypatch):
@@ -19,5 +20,6 @@ def test_render_root_entrypoint_imports_artifact_route(monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    paths = {route.path for route in module.app.routes}
-    assert "/api/artifacts" in paths, paths
+    # Exercise the route instead of reading .path from lazy router wrappers.
+    response = TestClient(module.app).post("/api/artifacts", json={})
+    assert response.status_code == 422, response.text
