@@ -26,3 +26,29 @@ def test_run_uses_demo_without_api_key(monkeypatch):
 def test_short_task_is_rejected():
     response = client.post("/api/run", json={"task":"too short"})
     assert response.status_code == 422
+
+def test_cors_preflight_allows_local_frontend_post():
+    response = client.options(
+        "/api/run",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert "POST" in response.headers.get("access-control-allow-methods", "").split(", ")
+    assert "content-type" in response.headers.get("access-control-allow-headers", "").lower()
+
+def test_cors_preflight_does_not_allow_unknown_origin():
+    response = client.options(
+        "/api/run",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 400
+    assert response.headers.get("access-control-allow-origin") is None
