@@ -93,7 +93,7 @@ CONTEXT:
     try:
         raw, provider_name = await generate_text(prompt, schema)
     except ProviderUnavailable as exc:
-        raise HTTPException(503, str(exc))
+        raise HTTPException(exc.status_code, str(exc))
     except (httpx.TimeoutException, httpx.RequestError):
         raise HTTPException(504, "All configured AI providers timed out or could not be reached.")
 
@@ -110,7 +110,7 @@ CONTEXT:
     except HTTPException:
         raise
     except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
-        raise HTTPException(502, "Gemini returned an invalid artifact package. Please retry.")
+        raise HTTPException(502, "AI providers returned an invalid artifact package. Please retry.")
 
     return {
         "artifact_id": f"artifact-{uuid.uuid4().hex[:12]}",
