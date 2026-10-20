@@ -180,3 +180,51 @@ def test_multi_agent_failure_logs_only_safe_provider_category(monkeypatch, capsy
     assert "provider=gemini category=timeout" in output
     assert "secret-test-key" not in output
     assert "private response detail" not in output
+
+
+@pytest.mark.parametrize("provider", ["cloudflare", "openrouter"])
+def test_openai_style_providers_receive_json_constraints(monkeypatch, provider):
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account-test")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cloudflare-test-token")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-token")
+    monkeypatch.setenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.1-8b-instruct-fp8")
+    monkeypatch.setenv("OPENROUTER_MODEL", "openrouter/free")
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            if provider == "cloudflare":
+                return {"result": {"response": '{"summary":"ok"}'}}
+            return {"choices": [{"message": {"content": '{"summary":"ok"}'}}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, headers, json):
+            captured["url"] = url
+            captured["body"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient", FakeClient)
+    schema = {
+        "type": "OBJECT",
+        "properties": {"summary": {"type": "STRING"}, "tasks": {"type": "ARRAY", "items": {"type": "STRING"}}},
+        "required": ["summary", "tasks"],
+    }
+    text, _ = asyncio.run(providers._request(provider, "Plan the task", schema))
+
+    assert text == '{"summary":"ok"}'
+    assert captured["body"]["response_format"] == {"type": "json_object"}
+    assert "Required JSON fields" in captured["body"]["messages"][0]["content"]
+    assert "summary" in captured["body"]["messages"][0]["content"]
+    assert captured["body"]["temperature"] == 0.1
+    assert captured["body"]["max_tokens"] == 4096
