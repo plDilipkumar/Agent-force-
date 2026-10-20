@@ -152,7 +152,12 @@ async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None =
         for field in ("spec", "tasks", "decisions", "risks", "verification", "assumptions"):
             if not isinstance(data.get(field), list):
                 raise ValueError("provider response has an invalid " + field + " field")
-        if any(not isinstance(item, dict) or not all(isinstance(item.get(k), str) and item[k].strip() for k in ("title", "description", "priority", "estimate")) for item in data["tasks"]):
+        if any(
+            not isinstance(item, dict)
+            or not all(isinstance(item.get(k), str) and item[k].strip() for k in ("title", "description", "priority", "estimate"))
+            or item.get("priority") not in {"P0", "P1", "P2"}
+            for item in data["tasks"]
+        ):
             raise ValueError("provider response has invalid task items")
         if any(not isinstance(item, dict) or not all(isinstance(item.get(k), str) and item[k].strip() for k in ("title", "rationale")) for item in data["decisions"]):
             raise ValueError("provider response has invalid decision items")
