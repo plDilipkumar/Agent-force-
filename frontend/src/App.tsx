@@ -4,7 +4,7 @@ import ChatPage from "./ChatPage";
 import { apiFetch } from "./api";
 import { Activity, ArrowUpRight, Bot, CheckCircle2, ChevronRight, CircleHelp, Clock3, Code2, Copy, Cpu, FileText, GitBranch, Layers3, LoaderCircle, Play, ShieldCheck, Sparkles, Terminal, TriangleAlert, Zap } from "lucide-react";
 type Task = {title:string;description:string;priority:"P0"|"P1"|"P2";estimate:string};
-type Artifact = {artifact_id:string;created_at:string;provider:string;language:"python";filename:string;code:string;test_filename:string;test_code:string;verification_status:"not_executed";safety_notice:string};
+type Artifact = {artifact_id:string;created_at:string;provider:string;language:"python";filename:string;code:string;test_filename:string;test_code:string;verification_status:"generated";safety_notice:string};
 type Plan = {id:string;created_at:string;provider:string;mode:string;summary:string;spec:string[];tasks:Task[];decisions:{title:string;rationale:string}[];risks:string[];verification:string[];assumptions:string[];notice:string;duration_ms:number};
 const API=(import.meta.env.VITE_API_BASE_URL||"http://localhost:8000").replace(/\/$/,"");
 const samples=[{label:"API platform",task:"Design a secure document upload API with validation, storage abstraction, and clear error handling.",context:"FastAPI backend, React frontend, PDF files up to 10 MB."},{label:"AI feature",task:"Build an AI-assisted code review workflow that identifies risky changes and produces actionable findings.",context:"GitHub pull request workflow; no execution of untrusted code."},{label:"SaaS workflow",task:"Create a multi-tenant task management service with role-based access and audit history.",context:"PostgreSQL persistence, REST API, reliable tests."}];
