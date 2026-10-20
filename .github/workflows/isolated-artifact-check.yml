@@ -1,0 +1,65 @@
+name: AgentForge isolated artifact check
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_filename:
+        description: "Python source filename (for example solution.py)"
+        required: true
+        type: string
+        default: solution.py
+      source_b64:
+        description: "Base64-encoded Python source, max 12 KB decoded"
+        required: true
+        type: string
+      test_filename:
+        description: "pytest filename beginning with test_ (for example test_solution.py)"
+        required: true
+        type: string
+        default: test_solution.py
+      test_b64:
+        description: "Base64-encoded pytest source, max 12 KB decoded"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository (no credentials are passed into the sandbox)
+        uses: actions/checkout@v4
+
+      - name: Validate and materialize bounded artifacts
+        env:
+          SOURCE_FILENAME: ${{ inputs.source_filename }}
+          SOURCE_B64: ${{ inputs.source_b64 }}
+          TEST_FILENAME: ${{ inputs.test_filename }}
+          TEST_B64: ${{ inputs.test_b64 }}
+          OUTPUT_DIR: ${{ runner.temp }}/agentforge-artifacts
+        run: python backend/sandbox/validate_artifacts.py
+
+      - name: Build sandbox image
+        run: docker build --pull -t agentforge-artifact-sandbox:ci backend/sandbox
+
+      - name: Execute untrusted artifact tests in isolated container
+        env:
+          ARTIFACT_DIR: ${{ runner.temp }}/agentforge-artifacts
+        run: |
+          docker run --rm \
+            --network none \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --memory=256m \
+            --cpus=1 \
+            --pids-limit=64 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --user 65534:65534 \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            --mount "type=bind,src=${ARTIFACT_DIR},dst=/work,readonly" \
+            agentforge-artifact-sandbox:ci

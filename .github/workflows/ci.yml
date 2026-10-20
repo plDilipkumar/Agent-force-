@@ -1,7 +1,7 @@
 name: AgentForge CI
 on:
   push:
-    branches: [main, feature/reviewable-code-artifacts, feature/product-experience]
+    branches: [main, feature/reviewable-code-artifacts, feature/product-experience, fix/render-root-entrypoint-import]
   pull_request:
     branches: [main]
 jobs:
