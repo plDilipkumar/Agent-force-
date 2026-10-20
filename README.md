@@ -50,6 +50,14 @@ Use VITE_API_BASE_URL for the API URL if needed. Never use a VITE_* variable for
 - POST /api/artifacts: generated Python source plus pytest suggestion; returns verification_status=not_executed.
 - Input/output limits, typed validation, provider failover, and bounded request timeouts.
 
+## Architecture and execution boundary
+
+- The React + TypeScript browser calls the FastAPI service through `VITE_API_BASE_URL`; production CORS should be restricted to the exact frontend origin(s) in `FRONTEND_ORIGINS`.
+- `POST /api/run` returns a typed engineering plan. Configured providers contribute independently; failed workers are labelled and successful outputs are retained.
+- `POST /api/artifacts` returns bounded Python source and pytest text with `verification_status=not_executed`. The web service never runs generated source or generated tests.
+- `backend/sandbox/Dockerfile` is exercised by CI using deterministic trusted fixtures in a separate container with no network, a read-only root filesystem and input mount, resource limits, dropped capabilities, no-new-privileges, and a non-root user. This verifies the isolation setup; it does **not** claim AI-generated code has been executed or verified.
+- Run history and project/artifact pages are browser-session previews, not durable account-backed storage. Real sign-in, persistent history, and usage analytics are not implemented.
+
 ## Safety and current limitations
 - Generated source is untrusted and is not executed inside the API process. Review before use.
 - Suggested tests and verification checklists are not evidence that tests have executed.
@@ -69,4 +77,8 @@ curl -i -X POST https://agentforge-api-ina0.onrender.com/api/run \
   -H 'Content-Type: application/json' \
   -H 'Origin: https://agentforge-inky.vercel.app' \
   --data '{"task":"Design a secure document upload API","context":"PDF files up to 10 MB","stack":"FastAPI + React","mode":"balanced"}'
+curl -i -X POST https://agentforge-api-ina0.onrender.com/api/artifacts \\
+  -H 'Content-Type: application/json' \\
+  -H 'Origin: https://agentforge-inky.vercel.app' \\
+  --data '{"task":"Create a pure Python addition function and pytest cases","context":"No network or shell"}'
 ```
