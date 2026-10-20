@@ -146,7 +146,7 @@ CONTEXT:
         raw, provider_name = await generate_text(prompt, schema)
         data = parse_json_text(raw)
     except ProviderUnavailable as exc:
-        raise HTTPException(503, str(exc))
+        raise HTTPException(exc.status_code, str(exc))
     except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
         raise HTTPException(502, "The AI providers returned an unreadable plan. Please retry.")
 
