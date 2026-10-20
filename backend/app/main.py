@@ -211,3 +211,47 @@ async def create_run(req: RunRequest):
 # Register the separately bounded artifact-generation endpoint.
 from .artifacts import router as artifacts_router
 app.include_router(artifacts_router)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("message")
+    @classmethod
+    def meaningful_message(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Enter a message before sending.")
+        return value
+
+
+@app.post("/api/chat")
+async def chat_with_gemini(req: ChatRequest):
+    """General-purpose chat uses Gemini as the explicit default; it never silently substitutes another provider."""
+    from .providers import _request, configured_providers
+
+    if "gemini" not in configured_providers():
+        raise HTTPException(503, "Gemini is not configured. Add GEMINI_API_KEY in the backend environment.")
+    prompt = (
+        "You are AgentForge Assistant, a helpful general-purpose AI assistant. "
+        "Answer the user's question clearly and directly. If unsure, say so. "
+        "Do not claim to have performed actions you have not performed.\n\n"
+        + req.message
+    )
+    try:
+        text, provider_name = await _request("gemini", prompt, None)
+    except httpx.TimeoutException:
+        raise HTTPException(504, "Gemini took too long to respond. Please try again.")
+    except httpx.RequestError:
+        raise HTTPException(502, "Gemini could not be reached. Check provider connectivity and try again.")
+    except RuntimeError as exc:
+        code = exc.args[1] if len(exc.args) > 1 and isinstance(exc.args[1], int) else 502
+        safe_code = 429 if code == 429 else (401 if code == 401 else 502)
+        message = "Gemini rate limit reached. Please try again later." if safe_code == 429 else (
+            "Gemini rejected the configured credentials. Check the API key and model access." if safe_code == 401 else
+            "Gemini could not complete the request. Please try again."
+        )
+        raise HTTPException(safe_code, message)
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise HTTPException(502, "Gemini returned an unreadable response. Please retry.")
+    return {"reply": text.strip(), "provider": provider_name, "model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash")}
