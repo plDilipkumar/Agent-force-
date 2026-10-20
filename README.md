@@ -77,8 +77,8 @@ curl -i -X POST https://agentforge-api-ina0.onrender.com/api/run \
   -H 'Content-Type: application/json' \
   -H 'Origin: https://agentforge-inky.vercel.app' \
   --data '{"task":"Design a secure document upload API","context":"PDF files up to 10 MB","stack":"FastAPI + React","mode":"balanced"}'
-curl -i -X POST https://agentforge-api-ina0.onrender.com/api/artifacts \\
-  -H 'Content-Type: application/json' \\
-  -H 'Origin: https://agentforge-inky.vercel.app' \\
+curl -i -X POST https://agentforge-api-ina0.onrender.com/api/artifacts \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://agentforge-inky.vercel.app' \
   --data '{"task":"Create a pure Python addition function and pytest cases","context":"No network or shell"}'
 ```
