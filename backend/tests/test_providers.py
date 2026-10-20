@@ -38,7 +38,7 @@ def test_provider_failover_after_gemini_timeout(monkeypatch):
 def test_no_provider_configured_is_explicit(monkeypatch):
     for key in ("GEMINI_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(key, raising=False)
-    with pytest.raises(providers.ProviderUnavailable, match="generation providers")
+    with pytest.raises(providers.ProviderUnavailable, match="generation providers"):
         asyncio.run(providers.generate_text("task"))
 
 
