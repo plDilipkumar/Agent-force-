@@ -41,6 +41,25 @@ def test_no_provider_configured_is_explicit(monkeypatch):
         asyncio.run(providers.generate_text("task"))
 
 
+def test_provider_failover_after_malformed_json(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cf-test")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "account-test")
+    calls = []
+
+    async def fake_request(provider, prompt, schema):
+        calls.append(provider)
+        if provider == "gemini":
+            return "not json", "Google Gemini (test)"
+        return '{"summary":"ok"}', "Cloudflare Workers AI (test)"
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    text, name = asyncio.run(providers.generate_text("task", {"type": "OBJECT"}))
+    assert text == '{"summary":"ok"}'
+    assert name.startswith("Cloudflare")
+    assert calls == ["gemini", "cloudflare"]
+
+
 def test_extract_openrouter_text():
     assert providers._extract_text("openrouter", {"choices":[{"message":{"content":"{}"}}]}) == "{}"
 
