@@ -19,7 +19,7 @@ Configure these on the Render backend service under **Environment**. Add secret 
 | GEMINI_MODEL | Gemini model | gemini-3.8-flash; use a model enabled for the key |
 | CLOUDFLARE_ACCOUNT_ID | Cloudflare account ID | Required with Cloudflare token |
 | CLOUDFLARE_API_TOKEN | Cloudflare Workers AI token | Required; keep secret |
-| CLOUDFLARE_MODEL | Workers AI model identifier | @cf/meta/llama-3.1-8b-instruct; confirm current availability |
+| CLOUDFLARE_MODEL | Workers AI model identifier | @cf/meta/llama-3.1-8b-instruct-fp8; confirm current availability |
 | OPENROUTER_API_KEY | OpenRouter credential | Required for OpenRouter |
 | OPENROUTER_MODEL | OpenRouter model identifier | openrouter/free; model availability may change |
 | OPENROUTER_SITE_URL | OpenRouter attribution URL | Optional; defaults to production frontend |
