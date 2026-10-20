@@ -141,9 +141,9 @@ TASK:
 {req.task}
 CONTEXT:
 {req.context or "(none)"}"""
-    from .providers import generate_text, ProviderUnavailable
+    from .providers import generate_multi_agent_text, ProviderUnavailable
     try:
-        raw, provider_name = await generate_text(prompt, schema)
+        raw, provider_name = await generate_multi_agent_text(prompt, schema)
         data = parse_json_text(raw)
     except ProviderUnavailable as exc:
         raise HTTPException(exc.status_code, str(exc))
