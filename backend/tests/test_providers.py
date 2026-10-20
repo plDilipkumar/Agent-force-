@@ -38,7 +38,7 @@ def test_provider_failover_after_gemini_timeout(monkeypatch):
 def test_no_provider_configured_is_explicit(monkeypatch):
     for key in ("GEMINI_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(key, raising=False)
-    with pytest.raises(providers.ProviderUnavailable, match="GEMINI_API_KEY"):
+    with pytest.raises(providers.ProviderUnavailable, match="generation providers")
         asyncio.run(providers.generate_text("task"))
 
 
@@ -58,7 +58,7 @@ def test_provider_failover_after_malformed_json(monkeypatch):
     text, name = asyncio.run(providers.generate_text("task", {"type": "OBJECT"}))
     assert text == '{"summary":"ok"}'
     assert name.startswith("Cloudflare")
-    assert calls == ["gemini", "cloudflare"]
+    assert calls == ["openrouter", "cloudflare"]
 
 
 def test_multi_agent_merges_independent_provider_outputs(monkeypatch):
@@ -152,7 +152,7 @@ def test_provider_http_failures_are_sanitized(monkeypatch, status_code, expected
     monkeypatch.setenv("GEMINI_API_KEY", "secret-test-key")
     monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
     monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key")
 
     async def fake_request(provider, prompt, schema):
         raise RuntimeError("secret-test-key upstream detail", status_code)
@@ -167,9 +167,9 @@ def test_provider_http_failures_are_sanitized(monkeypatch, status_code, expected
 
 def test_multi_agent_failure_logs_only_safe_provider_category(monkeypatch, capsys):
     monkeypatch.setenv("GEMINI_API_KEY", "secret-test-key")
-    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
-    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "c")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
 
     async def fake_request(provider, prompt, schema):
         raise httpx.ReadTimeout("secret-test-key and private response detail")
@@ -179,7 +179,7 @@ def test_multi_agent_failure_logs_only_safe_provider_category(monkeypatch, capsy
         asyncio.run(providers.generate_multi_agent_text("task", {"type": "OBJECT"}))
 
     output = capsys.readouterr().out
-    assert "provider=gemini category=timeout" in output
+    assert "provider=openrouter category=timeout" in output
     assert "secret-test-key" not in output
     assert "private response detail" not in output
 
