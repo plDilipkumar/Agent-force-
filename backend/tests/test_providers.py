@@ -92,7 +92,7 @@ def test_multi_agent_merges_independent_provider_outputs(monkeypatch):
     assert merged["tasks"]
     assert merged["risks"]
     assert "Generation workers" in label
-    assert "Gemini" in label and "cloudflare provider" in label and "openrouter provider" in label
+    assert "gemini provider" in label and "cloudflare provider" in label and "openrouter provider" in label
 
 
 def test_multi_agent_discards_invalid_worker_and_keeps_valid_result(monkeypatch):
