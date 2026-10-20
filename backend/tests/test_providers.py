@@ -161,3 +161,22 @@ def test_provider_http_failures_are_sanitized(monkeypatch, status_code, expected
     assert caught.value.status_code == expected_status
     assert "secret-test-key" not in str(caught.value)
     assert "upstream detail" not in str(caught.value)
+
+
+def test_multi_agent_failure_logs_only_safe_provider_category(monkeypatch, capsys):
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-test-key")
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    async def fake_request(provider, prompt, schema):
+        raise httpx.ReadTimeout("secret-test-key and private response detail")
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    with pytest.raises(providers.ProviderUnavailable):
+        asyncio.run(providers.generate_multi_agent_text("task", {"type": "OBJECT"}))
+
+    output = capsys.readouterr().out
+    assert "provider=gemini category=timeout" in output
+    assert "secret-test-key" not in output
+    assert "private response detail" not in output

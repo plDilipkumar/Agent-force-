@@ -105,3 +105,28 @@ def test_run_returns_truthful_fallback_when_gemini_network_fails(monkeypatch):
     assert body["tasks"]
     assert "not an AI-generated result" in body["notice"]
     assert "sensitive detail" not in response.text
+
+
+def test_run_returns_truthful_fallback_when_all_ai_workers_fail(monkeypatch):
+    import app.main as main
+    from fastapi import HTTPException
+
+    monkeypatch.setenv("GEMINI_API_KEY", "configured-test-key")
+
+    async def unavailable(*args, **kwargs):
+        raise HTTPException(503, "All configured AI workers failed")
+
+    monkeypatch.setattr(main, "gemini_result", unavailable)
+    response = client.post("/api/run", json={
+        "task": "Design a secure document upload API",
+        "context": "PDF files up to 10 MB",
+        "stack": "FastAPI + React",
+        "mode": "balanced",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "Deterministic fallback (AI providers unavailable)"
+    assert "not an AI-generated result" in body["notice"]
+    assert body["tasks"]
+    assert "configured-test-key" not in response.text

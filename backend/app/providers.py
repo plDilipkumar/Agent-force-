@@ -169,6 +169,22 @@ async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None =
     for provider, outcome in zip(providers, outcomes):
         if isinstance(outcome, BaseException):
             if isinstance(outcome, httpx.TimeoutException):
+                category = "timeout"
+            elif isinstance(outcome, httpx.RequestError):
+                category = "network"
+            elif isinstance(outcome, RuntimeError) and len(outcome.args) > 1 and isinstance(outcome.args[1], int):
+                category = f"http_{outcome.args[1]}"
+            elif isinstance(outcome, json.JSONDecodeError):
+                category = "invalid_json"
+            elif isinstance(outcome, KeyError):
+                category = "missing_field"
+            elif isinstance(outcome, (ValueError, TypeError)):
+                category = "invalid_output"
+            else:
+                category = "worker_error"
+            # Log only provider name and a controlled category, never exception text or response bodies.
+            print(f"AgentForge worker failure: provider={provider} category={category}")
+            if isinstance(outcome, httpx.TimeoutException):
                 failures.append(f"{provider}: timeout")
             elif isinstance(outcome, httpx.RequestError):
                 failures.append(f"{provider}: network error")

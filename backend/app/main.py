@@ -196,6 +196,17 @@ async def create_run(req: RunRequest):
             "Retry later for Gemini output. Verification items are recommendations; no tests were executed."
         )
         return result
+    except HTTPException as exc:
+        if exc.status_code not in {429, 502, 503, 504}:
+            raise
+        result = demo_result(req, run_id, started)
+        result["provider"] = "Deterministic fallback (AI providers unavailable)"
+        result["notice"] = (
+            f"AI planning failed with HTTP {exc.status_code}; this is a deterministic fallback plan, "
+            "not an AI-generated result. Retry later for model-generated planning. "
+            "Verification items are recommendations; no tests were executed."
+        )
+        return result
 
 # Register the separately bounded artifact-generation endpoint.
 from .artifacts import router as artifacts_router
