@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -58,6 +59,37 @@ def test_provider_failover_after_malformed_json(monkeypatch):
     assert text == '{"summary":"ok"}'
     assert name.startswith("Cloudflare")
     assert calls == ["gemini", "cloudflare"]
+
+
+def test_multi_agent_merges_independent_provider_outputs(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "c")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
+    calls = []
+
+    async def fake_request(provider, prompt, schema):
+        calls.append((provider, prompt))
+        payload = {
+            "summary": provider + " summary",
+            "spec": [provider + " spec"],
+            "tasks": [{"title": provider + " task", "description": "detail", "priority": "P1", "estimate": "1h"}],
+            "decisions": [{"title": provider + " decision", "rationale": "reason"}],
+            "risks": [provider + " risk"],
+            "verification": [provider + " check"],
+            "assumptions": [provider + " assumption"],
+        }
+        return json.dumps(payload), provider + " provider"
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    text, label = asyncio.run(providers.generate_multi_agent_text("base prompt", {"type": "OBJECT"}))
+    merged = json.loads(text)
+    assert len(calls) == 3
+    assert all("Independent reviewer role:" in prompt for _, prompt in calls)
+    assert len(merged["tasks"]) == 3
+    assert len(merged["risks"]) == 3
+    assert "Parallel engineering workers" in label
+    assert "gemini provider" in label and "cloudflare provider" in label and "openrouter provider" in label
 
 
 def test_extract_openrouter_text():
