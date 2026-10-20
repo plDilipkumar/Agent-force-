@@ -60,6 +60,7 @@ def test_run_returns_truthful_fallback_when_gemini_times_out(monkeypatch):
 
     monkeypatch.setattr(main, "API_KEY", "configured-test-key")
     monkeypatch.setenv("GEMINI_API_KEY", "configured-test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "configured-test-key")
 
     async def timeout(*args, **kwargs):
         raise httpx.ReadTimeout("sensitive detail should not leak")
@@ -85,6 +86,7 @@ def test_run_returns_truthful_fallback_when_gemini_network_fails(monkeypatch):
     import app.main as main
 
     monkeypatch.setattr(main, "API_KEY", "configured-test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "configured-test-key")
 
     async def network_error(*args, **kwargs):
         raise httpx.ConnectError("sensitive detail should not leak")
