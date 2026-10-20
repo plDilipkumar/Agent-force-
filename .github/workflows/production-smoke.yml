@@ -1,4 +1,5 @@
 name: AgentForge production smoke
+# Trigger a fresh production verification run after the backend deployment.
 
 on:
   push:
