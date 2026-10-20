@@ -138,7 +138,7 @@ async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None =
     }
 
     async def run_role(provider: str):
-        focused = prompt + "\\n\\nIndependent reviewer role: " + role_prompts[provider]
+        focused = prompt + "\n\nIndependent reviewer role: " + role_prompts[provider]
         text, provider_name = await _request(provider, focused, schema)
         cleaned = text.strip()
         start, end = cleaned.find("{"), cleaned.rfind("}")
@@ -147,6 +147,15 @@ async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None =
         data = json.loads(cleaned[start : end + 1])
         if not isinstance(data, dict):
             raise ValueError("provider returned a non-object")
+        if not isinstance(data.get("summary"), str) or not data["summary"].strip():
+            raise ValueError("provider response is missing a summary")
+        for field in ("spec", "tasks", "decisions", "risks", "verification", "assumptions"):
+            if not isinstance(data.get(field), list):
+                raise ValueError("provider response has an invalid " + field + " field")
+        if any(not isinstance(item, dict) or not all(isinstance(item.get(k), str) and item[k].strip() for k in ("title", "description", "priority", "estimate")) for item in data["tasks"]):
+            raise ValueError("provider response has invalid task items")
+        if any(not isinstance(item, dict) or not all(isinstance(item.get(k), str) and item[k].strip() for k in ("title", "rationale")) for item in data["decisions"]):
+            raise ValueError("provider response has invalid decision items")
         return provider, provider_name, data
 
     outcomes = await asyncio.gather(*(run_role(provider) for provider in providers), return_exceptions=True)
@@ -173,6 +182,8 @@ async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None =
             if isinstance(data.get(key), str) and data[key].strip():
                 merged[key] = data[key].strip()
                 break
+    if "summary" not in merged:
+        merged["summary"] = "Engineering plan compiled from the available AI worker responses; review assumptions and verification steps before implementation."
     limits = {"spec": 8, "tasks": 8, "decisions": 6, "risks": 6, "verification": 8, "assumptions": 8}
     for key, limit in limits.items():
         values = []
