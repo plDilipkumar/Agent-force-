@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -98,7 +99,14 @@ async def generate_text(prompt: str, schema: dict[str, Any] | None = None) -> tu
     final_status = 503
     for provider in providers:
         try:
-            return await _request(provider, prompt, schema)
+            text, provider_name = await _request(provider, prompt, schema)
+            if schema:
+                cleaned = text.strip()
+                start, end = cleaned.find("{"), cleaned.rfind("}")
+                if start < 0 or end <= start:
+                    raise ValueError("provider did not return a JSON object")
+                json.loads(cleaned[start : end + 1])
+            return text, provider_name
         except httpx.TimeoutException:
             final_status = 504
             failures.append(f"{provider}: timeout")
