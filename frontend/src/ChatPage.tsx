@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { apiFetch } from "./api";
 import { Bot, Send, Sparkles, UserRound, LoaderCircle, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
 
 type Message = { role: "user" | "assistant"; content: string; provider?: string };
@@ -19,7 +20,7 @@ export default function ChatPage({ apiBase }: Props) {
     setError("");
     setLoading(true);
     try {
-      const response = await fetch(apiBase + "/api/chat", {
+      const response = await apiFetch(apiBase + "/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text })
