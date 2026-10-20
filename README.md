@@ -81,5 +81,10 @@ A successful `/health` response alone does not verify CORS or the task workflow.
 
 - No durable database-backed run history or usage metrics are implemented; run IDs and durations are returned per request only.
 - Generated Python and suggested pytest files are not executed by the API. Do not treat `not_executed` as a successful verification result.
-- An isolated CI sandbox for generated-code execution is not yet implemented. Never execute generated artifacts on the web server or a developer machine without independent review and isolation.
+- A manual GitHub Actions workflow, `.github/workflows/isolated-artifact-check.yml`, has been added on the feature branch to run supplied source/tests in a separate Docker container with no network, a read-only root filesystem, a read-only artifact mount, non-root UID, dropped Linux capabilities, no-new-privileges, and CPU/memory/PID limits. It has not yet been exercised end-to-end or merged to `main`; treat it as unverified until a reviewed merge and a successful sandbox run. The API itself never executes generated code. Never execute generated artifacts on the web server.
 - Public deployment state and live browser integration must be verified separately from CI and are not implied by a green build.
+
+
+### Isolated artifact verification (feature branch)
+
+After the workflow is reviewed and merged into `main`, open GitHub Actions → **AgentForge isolated artifact check** → **Run workflow**. Supply the source filename, base64-encoded source, test filename, and base64-encoded pytest file. Each decoded file is limited to 12 KB and filenames are validated. The workflow has read-only repository permissions and passes no application credentials into the sandbox. A passing run means only that the submitted tests passed inside that constrained container; it does not prove the artifact is secure or correct for every use.
