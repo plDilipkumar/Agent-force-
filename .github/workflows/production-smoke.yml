@@ -91,6 +91,7 @@ jobs:
           PY
 
       - name: Verify bounded artifact API flow
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
