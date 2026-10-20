@@ -121,3 +121,76 @@ async def generate_text(prompt: str, schema: dict[str, Any] | None = None) -> tu
             final_status = 502
             failures.append(f"{provider}: invalid response")
     raise ProviderUnavailable("All configured AI providers failed (" + "; ".join(failures) + "). Retry later.", final_status)
+
+
+async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None = None) -> tuple[str, str]:
+    """Run configured providers as independent engineering roles and merge their JSON outputs."""
+    import asyncio
+
+    providers = configured_providers()
+    if not providers:
+        raise ProviderUnavailable("No AI providers are configured. Add GEMINI_API_KEY or Cloudflare/OpenRouter credentials in Render.")
+
+    role_prompts = {
+        "gemini": "Your role is lead architect: emphasize requirements, architecture, interfaces, and key design decisions.",
+        "cloudflare": "Your role is implementation planner: emphasize concrete ordered tasks, acceptance criteria, and practical verification.",
+        "openrouter": "Your role is independent security/reliability reviewer: emphasize threat risks, edge cases, failure handling, and missing assumptions.",
+    }
+
+    async def run_role(provider: str):
+        focused = prompt + "\\n\\nIndependent reviewer role: " + role_prompts[provider]
+        text, provider_name = await _request(provider, focused, schema)
+        cleaned = text.strip()
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError("provider did not return a JSON object")
+        data = json.loads(cleaned[start : end + 1])
+        if not isinstance(data, dict):
+            raise ValueError("provider returned a non-object")
+        return provider, provider_name, data
+
+    outcomes = await asyncio.gather(*(run_role(provider) for provider in providers), return_exceptions=True)
+    successful = [item for item in outcomes if not isinstance(item, BaseException)]
+    failures = []
+    for provider, outcome in zip(providers, outcomes):
+        if isinstance(outcome, BaseException):
+            if isinstance(outcome, httpx.TimeoutException):
+                failures.append(f"{provider}: timeout")
+            elif isinstance(outcome, httpx.RequestError):
+                failures.append(f"{provider}: network error")
+            elif isinstance(outcome, RuntimeError) and len(outcome.args) > 1:
+                failures.append(f"{provider}: HTTP {outcome.args[1]}")
+            else:
+                failures.append(f"{provider}: invalid response or provider error")
+    if not successful:
+        raise ProviderUnavailable("All configured AI workers failed (" + "; ".join(failures) + "). Retry later.", 503)
+
+    # Keep output deterministic and bounded, while combining unique contributions from every worker.
+    successful.sort(key=lambda item: providers.index(item[0]))
+    merged: dict[str, Any] = {}
+    for key in ("summary",):
+        for _, _, data in successful:
+            if isinstance(data.get(key), str) and data[key].strip():
+                merged[key] = data[key].strip()
+                break
+    limits = {"spec": 8, "tasks": 8, "decisions": 6, "risks": 6, "verification": 8, "assumptions": 8}
+    for key, limit in limits.items():
+        values = []
+        seen = set()
+        for _, _, data in successful:
+            items = data.get(key, [])
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if key in ("tasks", "decisions") and isinstance(item, dict):
+                    identity = str(item.get("title", "")).strip().casefold()
+                else:
+                    identity = str(item).strip().casefold()
+                if identity and identity not in seen:
+                    seen.add(identity)
+                    values.append(item)
+        merged[key] = values[:limit]
+    names = [name for _, name, _ in successful]
+    if failures:
+        names.append("partial worker failure: " + ", ".join(failures))
+    return json.dumps(merged), "Parallel engineering workers (" + "; ".join(names) + ")"
