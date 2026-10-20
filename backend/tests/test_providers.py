@@ -24,7 +24,7 @@ def test_provider_failover_after_gemini_timeout(monkeypatch):
 
     async def fake_request(provider, prompt, schema):
         calls.append(provider)
-        if provider == "gemini":
+        if provider == "openrouter":
             raise httpx.ReadTimeout("do not leak this")
         return '{"summary":"ok"}', "Cloudflare Workers AI (test-model)"
 
@@ -32,7 +32,7 @@ def test_provider_failover_after_gemini_timeout(monkeypatch):
     text, name = asyncio.run(providers.generate_text("task", {"type": "OBJECT"}))
     assert text == '{"summary":"ok"}'
     assert name.startswith("Cloudflare Workers AI")
-    assert calls == ["gemini", "cloudflare"]
+    assert calls == ["openrouter", "cloudflare"]
 
 
 def test_no_provider_configured_is_explicit(monkeypatch):
@@ -50,8 +50,8 @@ def test_provider_failover_after_malformed_json(monkeypatch):
 
     async def fake_request(provider, prompt, schema):
         calls.append(provider)
-        if provider == "gemini":
-            return "not json", "Google Gemini (test)"
+        if provider == "openrouter":
+            return "not json", "OpenRouter (test)"
         return '{"summary":"ok"}', "Cloudflare Workers AI (test)"
 
     monkeypatch.setattr(providers, "_request", fake_request)
@@ -85,22 +85,24 @@ def test_multi_agent_merges_independent_provider_outputs(monkeypatch):
     text, label = asyncio.run(providers.generate_multi_agent_text("base prompt", {"type": "OBJECT"}))
     merged = json.loads(text)
     assert len(calls) == 3
-    assert all("Independent reviewer role:" in prompt for _, prompt in calls)
+    assert {provider for provider, _ in calls} == {"openrouter", "cloudflare", "gemini"}
+    assert all("Independent reviewer role:" in prompt for provider, prompt in calls if provider in {"openrouter", "cloudflare"})
+    assert any("Review and improve" in prompt for provider, prompt in calls if provider == "gemini")
     assert len(merged["tasks"]) == 3
     assert len(merged["risks"]) == 3
-    assert "Parallel engineering workers" in label
-    assert "gemini provider" in label and "cloudflare provider" in label and "openrouter provider" in label
+    assert "Generation workers" in label
+    assert "Gemini" in label and "cloudflare provider" in label and "openrouter provider" in label
 
 
 def test_multi_agent_discards_invalid_worker_and_keeps_valid_result(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "g")
     monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "c")
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
 
     async def fake_request(provider, prompt, schema):
-        if provider == "gemini":
-            return json.dumps({"summary": "bad but incomplete"}), "Gemini"
+        if provider == "cloudflare":
+            return json.dumps({"summary": "bad but incomplete"}), "Cloudflare"
         payload = {
             "summary": "valid summary", "spec": ["spec"],
             "tasks": [{"title": "task", "description": "detail", "priority": "P1", "estimate": "1h"}],
@@ -114,7 +116,7 @@ def test_multi_agent_discards_invalid_worker_and_keeps_valid_result(monkeypatch)
     merged = json.loads(text)
     assert merged["summary"] == "valid summary"
     assert len(merged["tasks"]) == 1
-    assert "partial worker failure: gemini: invalid response or provider error" in label
+    assert "partial generation failure: cloudflare: invalid response" in label
 
 
 def test_extract_openrouter_text():
@@ -127,9 +129,9 @@ def test_extract_cloudflare_text():
 
 def test_multi_agent_discards_worker_with_invalid_priority(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "g")
-    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
-    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "c")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
 
     async def fake_request(provider, prompt, schema):
         payload = {
@@ -141,7 +143,7 @@ def test_multi_agent_discards_worker_with_invalid_priority(monkeypatch):
         return json.dumps(payload), "Gemini"
 
     monkeypatch.setattr(providers, "_request", fake_request)
-    with pytest.raises(providers.ProviderUnavailable, match="invalid response or provider error"):
+    with pytest.raises(providers.ProviderUnavailable, match="generation workers failed"):
         asyncio.run(providers.generate_multi_agent_text("base", {"type": "OBJECT"}))
 
 
