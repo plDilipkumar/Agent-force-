@@ -49,8 +49,8 @@ jobs:
 
           source_name = os.environ["SOURCE_FILENAME"]
           test_name = os.environ["TEST_FILENAME"]
-          source_pattern = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}\\.py$")
-          test_pattern = re.compile(r"^test_[A-Za-z0-9_]{1,58}\\.py$")
+          source_pattern = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}\.py$")
+          test_pattern = re.compile(r"^test_[A-Za-z0-9_]{1,58}\.py$")
           if not source_pattern.fullmatch(source_name) or ".." in source_name:
               raise SystemExit("Rejected source filename")
           if not test_pattern.fullmatch(test_name) or ".." in test_name:
@@ -65,7 +65,7 @@ jobs:
                   raise SystemExit(f"Rejected invalid base64 input: {name}")
               if not data or len(data) > 12_000:
                   raise SystemExit(f"Rejected artifact size for {name}")
-              if b"\\x00" in data:
+              if b"\x00" in data:
                   raise SystemExit(f"Rejected NUL byte in {name}")
               return data
 
