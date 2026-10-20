@@ -1,0 +1,122 @@
+name: AgentForge production smoke
+
+on:
+  push:
+    branches:
+      - test/production-smoke-runner-20261020
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://agentforge-api-ina0.onrender.com"
+          status="$(curl -sS --max-time 25 -o /tmp/health.json -w '%{http_code}' "$API/health")"
+          if [ "$status" != "200" ]; then
+            echo "Health endpoint returned HTTP $status"
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          data = json.load(open("/tmp/health.json"))
+          assert data.get("status") == "ok", "health status was not ok"
+          assert data.get("service") == "agentforge-api", "unexpected service identity"
+          print("Health endpoint: HTTP 200; service identity and status verified")
+          PY
+
+      - name: Verify production CORS preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://agentforge-api-ina0.onrender.com"
+          status="$(curl -sS --max-time 25 -D /tmp/cors.headers -o /tmp/cors.body -w '%{http_code}' \
+            -X OPTIONS "$API/api/run" \
+            -H 'Origin: https://agentforge-inky.vercel.app' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type')"
+          if [ "$status" != "200" ]; then
+            echo "CORS preflight returned HTTP $status"
+            exit 1
+          fi
+          tr -d '\r' < /tmp/cors.headers > /tmp/cors.normalized
+          grep -iq '^access-control-allow-origin: https://agentforge-inky.vercel.app$' /tmp/cors.normalized
+          grep -iq '^access-control-allow-methods:.*POST' /tmp/cors.normalized
+          grep -iq '^access-control-allow-headers:.*content-type' /tmp/cors.normalized
+          echo "Production frontend origin is allowed for POST with content-type"
+
+      - name: Verify real task-to-plan API flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://agentforge-api-ina0.onrender.com"
+          status="$(curl -sS --max-time 100 -o /tmp/plan.json -w '%{http_code}' \
+            -X POST "$API/api/run" \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: https://agentforge-inky.vercel.app' \
+            --data '{"task":"Design a secure document upload API","context":"PDF files up to 10 MB","stack":"FastAPI + React","mode":"balanced"}')"
+          if [ "$status" != "200" ]; then
+            echo "Task-to-plan endpoint returned HTTP $status"
+            python - <<'PY'
+          import json
+          try:
+              data = json.load(open("/tmp/plan.json"))
+              print("Sanitized API detail:", str(data.get("detail", "no detail"))[:180])
+          except Exception:
+              print("Response was not valid JSON")
+          PY
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          data = json.load(open("/tmp/plan.json"))
+          assert isinstance(data.get("summary"), str) and data["summary"].strip(), "missing summary"
+          tasks = data.get("tasks")
+          assert isinstance(tasks, list) and tasks, "missing structured tasks"
+          assert all(t.get("priority") in {"P0", "P1", "P2"} for t in tasks), "invalid task priority"
+          assert isinstance(data.get("verification"), list) and data["verification"], "missing verification checklist"
+          print("Task-to-plan API: HTTP 200; structured summary, tasks, priorities, and verification checklist verified")
+          print("Provider mode:", str(data.get("provider", "unknown"))[:100])
+          PY
+
+      - name: Verify bounded artifact API flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://agentforge-api-ina0.onrender.com"
+          status="$(curl -sS --max-time 100 -o /tmp/artifact.json -w '%{http_code}' \
+            -X POST "$API/api/artifacts" \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: https://agentforge-inky.vercel.app' \
+            --data '{"task":"Create a pure Python addition function and pytest cases","context":"Deterministic only; no network or shell"}')"
+          if [ "$status" != "200" ]; then
+            echo "Artifact endpoint returned HTTP $status"
+            python - <<'PY'
+          import json
+          try:
+              data = json.load(open("/tmp/artifact.json"))
+              print("Sanitized API detail:", str(data.get("detail", "no detail"))[:180])
+          except Exception:
+              print("Response was not valid JSON")
+          PY
+            exit 1
+          fi
+          python - <<'PY'
+          import json, re
+          data = json.load(open("/tmp/artifact.json"))
+          assert data.get("language") == "python", "unexpected artifact language"
+          assert data.get("verification_status") == "not_executed", "artifact verification status must be truthful"
+          assert re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}\.py", data.get("filename", "")), "unsafe source filename"
+          assert re.fullmatch(r"test_[A-Za-z][A-Za-z0-9_]{0,58}\.py", data.get("test_filename", "")), "unsafe test filename"
+          assert isinstance(data.get("code"), str) and 0 < len(data["code"]) <= 12000, "source outside bounds"
+          assert isinstance(data.get("test_code"), str) and 0 < len(data["test_code"]) <= 12000, "tests outside bounds"
+          assert "not been executed" in data.get("safety_notice", "").lower(), "missing safety notice"
+          print("Artifact API: HTTP 200; bounded source/test files and not_executed status verified")
+          PY
