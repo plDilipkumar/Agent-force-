@@ -175,7 +175,8 @@ async def health():
 async def create_run(req: RunRequest):
     started = time.perf_counter()
     run_id = f"af-{int(time.time())}-{os.urandom(3).hex()}"
-    if not API_KEY:
+    from .providers import configured_providers
+    if not configured_providers():
         return demo_result(req, run_id, started)
     try:
         return await gemini_result(req, run_id, started)
