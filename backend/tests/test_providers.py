@@ -123,3 +123,41 @@ def test_extract_openrouter_text():
 
 def test_extract_cloudflare_text():
     assert providers._extract_text("cloudflare", {"result":{"response":"{}"}}) == "{}"
+
+
+def test_multi_agent_discards_worker_with_invalid_priority(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    async def fake_request(provider, prompt, schema):
+        payload = {
+            "summary": "invalid priority", "spec": ["spec"],
+            "tasks": [{"title": "task", "description": "detail", "priority": "urgent", "estimate": "1h"}],
+            "decisions": [{"title": "decision", "rationale": "reason"}],
+            "risks": ["risk"], "verification": ["check"], "assumptions": ["assumption"],
+        }
+        return json.dumps(payload), "Gemini"
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    with pytest.raises(providers.ProviderUnavailable, match="invalid response or provider error"):
+        asyncio.run(providers.generate_multi_agent_text("base", {"type": "OBJECT"}))
+
+
+@pytest.mark.parametrize("status_code, expected_status", [(401, 502), (429, 429)])
+def test_provider_http_failures_are_sanitized(monkeypatch, status_code, expected_status):
+    monkeypatch.setenv("GEMINI_API_KEY", "secret-test-key")
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    async def fake_request(provider, prompt, schema):
+        raise RuntimeError("secret-test-key upstream detail", status_code)
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    with pytest.raises(providers.ProviderUnavailable) as caught:
+        asyncio.run(providers.generate_text("task"))
+    assert caught.value.status_code == expected_status
+    assert "secret-test-key" not in str(caught.value)
+    assert "upstream detail" not in str(caught.value)
