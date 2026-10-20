@@ -92,6 +92,31 @@ def test_multi_agent_merges_independent_provider_outputs(monkeypatch):
     assert "gemini provider" in label and "cloudflare provider" in label and "openrouter provider" in label
 
 
+def test_multi_agent_discards_invalid_worker_and_keeps_valid_result(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "c")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    async def fake_request(provider, prompt, schema):
+        if provider == "gemini":
+            return json.dumps({"summary": "bad but incomplete"}), "Gemini"
+        payload = {
+            "summary": "valid summary", "spec": ["spec"],
+            "tasks": [{"title": "task", "description": "detail", "priority": "P1", "estimate": "1h"}],
+            "decisions": [{"title": "decision", "rationale": "reason"}],
+            "risks": ["risk"], "verification": ["check"], "assumptions": ["assumption"],
+        }
+        return json.dumps(payload), "Cloudflare"
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    text, label = asyncio.run(providers.generate_multi_agent_text("base", {"type": "OBJECT"}))
+    merged = json.loads(text)
+    assert merged["summary"] == "valid summary"
+    assert len(merged["tasks"]) == 1
+    assert "partial worker failure: gemini: invalid response or provider error" in label
+
+
 def test_extract_openrouter_text():
     assert providers._extract_text("openrouter", {"choices":[{"message":{"content":"{}"}}]}) == "{}"
 
