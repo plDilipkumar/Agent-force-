@@ -9,6 +9,10 @@ import httpx
 class ProviderUnavailable(Exception):
     """Raised when no configured provider can complete a request."""
 
+    def __init__(self, message: str, status_code: int = 503):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 def configured_providers() -> list[str]:
     names: list[str] = []
@@ -78,7 +82,7 @@ async def _request(provider: str, prompt: str, schema: dict[str, Any] | None) ->
             )
             name = f"OpenRouter ({model})"
     if response.status_code >= 400:
-        raise RuntimeError(f"{provider} returned HTTP {response.status_code}")
+        raise RuntimeError(f"{provider} returned HTTP {response.status_code}", response.status_code)
     text = _extract_text(provider, response.json())
     if not isinstance(text, str) or not text.strip():
         raise ValueError(f"{provider} returned empty text")
@@ -89,13 +93,23 @@ async def generate_text(prompt: str, schema: dict[str, Any] | None = None) -> tu
     """Try configured providers once each; never retry indefinitely or reveal credentials."""
     providers = configured_providers()
     if not providers:
-        raise ProviderUnavailable("No AI providers are configured. Add provider credentials in Render.")
+        raise ProviderUnavailable("No AI providers are configured. Add GEMINI_API_KEY or Cloudflare/OpenRouter credentials in Render.")
     failures: list[str] = []
+    final_status = 503
     for provider in providers:
         try:
             return await _request(provider, prompt, schema)
-        except (httpx.TimeoutException, httpx.RequestError):
-            failures.append(f"{provider}: timeout/network error")
-        except (RuntimeError, ValueError, KeyError, IndexError, TypeError):
-            failures.append(f"{provider}: provider error or invalid response")
-    raise ProviderUnavailable("All configured AI providers failed (" + "; ".join(failures) + "). Retry later.")
+        except httpx.TimeoutException:
+            final_status = 504
+            failures.append(f"{provider}: timeout")
+        except httpx.RequestError:
+            final_status = 502
+            failures.append(f"{provider}: network error")
+        except RuntimeError as exc:
+            code = exc.args[1] if len(exc.args) > 1 and isinstance(exc.args[1], int) else 502
+            final_status = 429 if code == 429 else 502
+            failures.append(f"{provider}: HTTP {code}")
+        except (ValueError, KeyError, IndexError, TypeError):
+            final_status = 502
+            failures.append(f"{provider}: invalid response")
+    raise ProviderUnavailable("All configured AI providers failed (" + "; ".join(failures) + "). Retry later.", final_status)
