@@ -128,7 +128,7 @@ def test_artifact_rejects_unsafe_generated_filename(monkeypatch):
 def test_artifact_provider_http_failures_are_bounded_and_do_not_leak_body(
     monkeypatch, capsys, status_code, expected_status
 ):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-secret")
 
     class FakeResponse:
         def __init__(self):
@@ -171,7 +171,7 @@ def test_artifact_provider_http_failures_are_bounded_and_do_not_leak_body(
 def test_artifact_provider_transport_failures_are_sanitized(
     monkeypatch, exception, expected_status
 ):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-secret")
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
