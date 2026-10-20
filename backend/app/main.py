@@ -141,38 +141,22 @@ TASK:
 {req.task}
 CONTEXT:
 {req.context or "(none)"}"""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
-    async with httpx.AsyncClient(timeout=httpx.Timeout(35.0, connect=8.0)) as client:
-        response = await client.post(url, headers={"x-goog-api-key": API_KEY}, json={
-            "contents":[{"parts":[{"text":prompt}]}],
-            "generationConfig":{"responseMimeType":"application/json","responseSchema":schema}
-        })
-    if response.status_code == 429:
-        raise HTTPException(429, "Gemini rate limit reached. Wait a moment or use demo mode.")
-    if response.status_code >= 400:
-        # Log only provider status and a bounded error body; never log the API key or request URL.
-        try:
-            provider_error = response.json().get("error", {})
-            raw_code = str(provider_error.get("status", "unknown"))
-            provider_code = raw_code if re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", raw_code) else "unknown"
-        except (ValueError, AttributeError):
-            provider_code = "unknown"
-        # Provider messages may contain sensitive diagnostics; never copy response bodies to logs.
-        print(f"Gemini API error: http_status={response.status_code} code={provider_code}")
-        raise HTTPException(502, f"Gemini provider rejected the request (HTTP {response.status_code}, {provider_code}). Check Render GEMINI_API_KEY permissions/quota and GEMINI_MODEL.")
-    payload = response.json()
+    from .providers import generate_text, ProviderUnavailable
     try:
-        raw = payload["candidates"][0]["content"]["parts"][0]["text"]
+        raw, provider_name = await generate_text(prompt, schema)
         data = parse_json_text(raw)
+    except ProviderUnavailable as exc:
+        raise HTTPException(503, str(exc))
     except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
-        raise HTTPException(502, "The AI provider returned an unreadable plan. Please retry.")
+        raise HTTPException(502, "The AI providers returned an unreadable plan. Please retry.")
+
     for key in ("spec", "tasks", "decisions", "risks", "verification", "assumptions"):
         if not isinstance(data.get(key), list):
             raise HTTPException(502, "The AI provider returned an invalid plan shape.")
         data[key] = data[key][:8]
     data["id"] = run_id
     data["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    data["provider"] = f"Google Gemini ({MODEL})"
+    data["provider"] = provider_name
     data["mode"] = req.mode
     data["notice"] = "AI-generated plan; review before implementation. Verification items are recommendations, not executed test results."
     data["duration_ms"] = int((time.perf_counter()-started)*1000)
@@ -184,7 +168,8 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status":"ok","service":"agentforge-api","version":APP_VERSION,"ai_configured":bool(API_KEY)}
+    from .providers import configured_providers
+    return {"status":"ok","service":"agentforge-api","version":APP_VERSION,"ai_configured":bool(configured_providers()),"providers_configured":configured_providers()}
 
 @app.post("/api/run", response_model=RunResult)
 async def create_run(req: RunRequest):
