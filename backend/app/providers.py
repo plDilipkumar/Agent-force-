@@ -138,10 +138,10 @@ async def _request(provider: str, prompt: str, schema: dict[str, Any] | None) ->
 
 
 async def generate_text(prompt: str, schema: dict[str, Any] | None = None) -> tuple[str, str]:
-    """Try configured providers once each; never retry indefinitely or reveal credentials."""
-    providers = configured_providers()
+    """Generate using OpenRouter/Cloudflare only; Gemini is reserved for review and chat."""
+    providers = [name for name in ("openrouter", "cloudflare") if name in configured_providers()]
     if not providers:
-        raise ProviderUnavailable("No AI providers are configured. Add GEMINI_API_KEY or Cloudflare/OpenRouter credentials in Render.")
+        raise ProviderUnavailable("No generation providers are configured. Add OPENROUTER_API_KEY or Cloudflare credentials in Render.")
     failures: list[str] = []
     final_status = 503
     for provider in providers:
@@ -164,12 +164,10 @@ async def generate_text(prompt: str, schema: dict[str, Any] | None = None) -> tu
             code = exc.args[1] if len(exc.args) > 1 and isinstance(exc.args[1], int) else 502
             final_status = 429 if code == 429 else 502
             failures.append(f"{provider}: HTTP {code}")
-        except (ValueError, KeyError, IndexError, TypeError):
+        except (ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError):
             final_status = 502
             failures.append(f"{provider}: invalid response")
-    raise ProviderUnavailable("All configured AI providers failed (" + "; ".join(failures) + "). Retry later.", final_status)
-
-
+    raise ProviderUnavailable("All generation providers failed (" + "; ".join(failures) + "). Retry later.", final_status)
 async def generate_multi_agent_text(prompt: str, schema: dict[str, Any] | None = None) -> tuple[str, str]:
     """Run configured providers as independent engineering roles and merge their JSON outputs."""
     import asyncio
