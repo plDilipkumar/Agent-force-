@@ -44,3 +44,42 @@ Set `VITE_API_BASE_URL` to the backend URL (default local API: http://localhost:
 The feature branch adds `POST /api/artifacts`, which asks Gemini for a bounded Python source file and a separate pytest file. The endpoint returns `verification_status: not_executed`; it does not run generated code inside the API process. A configured backend `GEMINI_API_KEY` is required for artifact generation; the deterministic planning demo remains available without it.
 
 **Current limitation:** artifact execution in an isolated CI sandbox is not yet part of the verified end-to-end workflow. Treat generated files as untrusted suggestions and review them before use. Do not interpret the suggested pytest file or verification checklist as evidence that tests have run.
+
+
+## Environment variables
+
+Configure these values on the backend service (Render), not in the frontend bundle:
+
+| Variable | Purpose | Example / default |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | Server-side Gemini credential; leave empty for deterministic planning demo mode | Secret value in Render |
+| `GEMINI_MODEL` | Gemini model identifier | `gemini-3.8-flash` (configured default; verify availability for your key) |
+| `FRONTEND_ORIGIN` | Single-origin compatibility fallback | `http://localhost:5173` |
+| `FRONTEND_ORIGINS` | Comma-separated allowlist used for browser CORS | `https://agentforge-inky.vercel.app,http://localhost:5173` |
+
+Set `FRONTEND_ORIGINS` to the exact production frontend origin plus any development origin you need. Do not add a trailing path (for example, `/dashboard`) or use a wildcard. After changing Render environment variables, redeploy/restart the API and verify preflight requests from the deployed frontend origin.
+
+## Smoke checks
+
+Replace the API URL if your Render service uses a different hostname:
+
+```bash
+curl -i https://agentforge-api-ina0.onrender.com/health
+curl -i -X OPTIONS https://agentforge-api-ina0.onrender.com/api/run \
+  -H 'Origin: https://agentforge-inky.vercel.app' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type'
+curl -i -X POST https://agentforge-api-ina0.onrender.com/api/run \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: https://agentforge-inky.vercel.app' \
+  --data '{"task":"Design a bounded file upload API with validation","stack":"FastAPI + React","mode":"balanced"}'
+```
+
+A successful `/health` response alone does not verify CORS or the task workflow. The preflight response must include `Access-Control-Allow-Origin: https://agentforge-inky.vercel.app`; the POST should return a structured plan. Without a configured Gemini key, the plan is deterministic demo output. Artifact generation requires Gemini and returns `verification_status: not_executed`.
+
+## Explicit limitations
+
+- No durable database-backed run history or usage metrics are implemented; run IDs and durations are returned per request only.
+- Generated Python and suggested pytest files are not executed by the API. Do not treat `not_executed` as a successful verification result.
+- An isolated CI sandbox for generated-code execution is not yet implemented. Never execute generated artifacts on the web server or a developer machine without independent review and isolation.
+- Public deployment state and live browser integration must be verified separately from CI and are not implied by a green build.
