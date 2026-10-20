@@ -195,9 +195,21 @@ async def create_run(req: RunRequest):
     try:
         return await gemini_result(req, run_id, started)
     except httpx.TimeoutException:
-        raise HTTPException(504, "Gemini request timed out. Retry with a shorter task.")
+        result = demo_result(req, run_id, started)
+        result["provider"] = "Deterministic fallback (Gemini timed out)"
+        result["notice"] = (
+            "Gemini timed out, so this is a deterministic fallback plan, not an AI-generated result. "
+            "Retry later for Gemini output. Verification items are recommendations; no tests were executed."
+        )
+        return result
     except httpx.RequestError:
-        raise HTTPException(502, "Could not reach the Gemini API. Try again shortly.")
+        result = demo_result(req, run_id, started)
+        result["provider"] = "Deterministic fallback (Gemini network error)"
+        result["notice"] = (
+            "Gemini could not be reached, so this is a deterministic fallback plan, not an AI-generated result. "
+            "Retry later for Gemini output. Verification items are recommendations; no tests were executed."
+        )
+        return result
 
 # Register the separately bounded artifact-generation endpoint.
 from .artifacts import router as artifacts_router
