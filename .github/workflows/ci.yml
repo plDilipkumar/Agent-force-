@@ -17,6 +17,45 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: pytest -q
+
+  sandbox-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create deterministic smoke-test artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/agentforge-smoke"
+          chmod 755 "$RUNNER_TEMP/agentforge-smoke"
+          cat > "$RUNNER_TEMP/agentforge-smoke/solution.py" <<'PY'
+          def add(left: int, right: int) -> int:
+              return left + right
+          PY
+          cat > "$RUNNER_TEMP/agentforge-smoke/test_solution.py" <<'PY'
+          from solution import add
+
+          def test_add_positive_and_negative_numbers():
+              assert add(2, 3) == 5
+              assert add(-2, 2) == 0
+          PY
+      - name: Build constrained artifact sandbox
+        run: docker build --pull -t agentforge-artifact-sandbox:ci backend/sandbox
+      - name: Execute smoke tests in isolated container
+        run: |
+          docker run --rm \
+            --network none \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --memory=256m \
+            --cpus=1 \
+            --pids-limit=64 \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --user 65534:65534 \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+            --mount "type=bind,src=$RUNNER_TEMP/agentforge-smoke,dst=/work,readonly" \
+            agentforge-artifact-sandbox:ci
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
