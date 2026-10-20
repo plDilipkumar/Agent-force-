@@ -8,7 +8,7 @@ AgentForge provides structured engineering plans and reviewable code/test artifa
 - Health: https://agentforge-api-ina0.onrender.com/health
 
 ## Multi-provider AI routing
-The API tries configured providers once each, in this order: Gemini, Cloudflare Workers AI, then OpenRouter. A timeout, network error, rate limit, HTTP failure, or malformed response moves to the next configured provider. There are no unbounded retry loops. If every configured provider fails, the API returns a sanitized error; provider credentials and response bodies are not logged. Gemini remains supported and does not need to be recreated.
+For engineering plans, configured providers work as independent parallel reviewers: Gemini focuses on architecture, Cloudflare Workers AI on implementation sequencing and verification, and OpenRouter on security/reliability. Their structured outputs are merged into one bounded plan. If a worker fails, successful worker outputs are retained and the failure is labelled. Code-artifact generation uses bounded sequential failover (Gemini, Cloudflare, then OpenRouter). There are no unbounded retry loops. Provider credentials and response bodies are not logged. Gemini remains supported and does not need to be recreated.
 
 ## Render environment variables
 Configure these on the Render backend service under **Environment**. Add secret values directly in Render, not GitHub, the frontend, or chat.
