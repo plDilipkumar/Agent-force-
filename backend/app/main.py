@@ -7,7 +7,7 @@ import time
 from typing import Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
@@ -16,12 +16,22 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 app = FastAPI(title="AgentForge API", version=APP_VERSION, description="Structured AI engineering workflow API")
+from .auth import router as auth_router, init_auth_db, close_auth_db, require_user
+app.include_router(auth_router)
+
+@app.on_event("startup")
+async def startup_auth_storage() -> None:
+    await init_auth_db()
+
+@app.on_event("shutdown")
+async def shutdown_auth_storage() -> None:
+    await close_auth_db()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in os.getenv("FRONTEND_ORIGINS", ORIGIN).split(",") if x.strip()],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 class RunRequest(BaseModel):
@@ -172,7 +182,7 @@ async def health():
     return {"status":"ok","service":"agentforge-api","version":APP_VERSION,"ai_configured":bool(configured_providers()),"providers_configured":configured_providers()}
 
 @app.post("/api/run", response_model=RunResult)
-async def create_run(req: RunRequest):
+async def create_run(req: RunRequest, user: dict = Depends(require_user)):
     started = time.perf_counter()
     run_id = f"af-{int(time.time())}-{os.urandom(3).hex()}"
     from .providers import configured_providers
@@ -210,7 +220,7 @@ async def create_run(req: RunRequest):
 
 # Register the separately bounded artifact-generation endpoint.
 from .artifacts import router as artifacts_router
-app.include_router(artifacts_router)
+app.include_router(artifacts_router, dependencies=[Depends(require_user)])
 
 
 class ChatRequest(BaseModel):
@@ -226,7 +236,7 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/chat")
-async def chat_with_gemini(req: ChatRequest):
+async def chat_with_gemini(req: ChatRequest, user: dict = Depends(require_user)):
     """General-purpose chat uses Gemini as the explicit default; it never silently substitutes another provider."""
     from .providers import _request, configured_providers
 
