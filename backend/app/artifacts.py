@@ -67,14 +67,8 @@ def _validate_filename(value: str, *, test: bool = False) -> str:
 @router.post("/api/artifacts", response_model=ArtifactResponse)
 async def generate_artifact(req: ArtifactRequest) -> dict:
     """Generate reviewable Python source and pytest suggestions; never execute either file."""
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(
-            503,
-            "Code artifact generation requires GEMINI_API_KEY. Planning demo mode remains available.",
-        )
+    from .providers import generate_text, ProviderUnavailable
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
     schema = {
         "type": "OBJECT",
         "properties": {
@@ -96,36 +90,14 @@ TASK:
 {req.task}
 CONTEXT:
 {req.context or "(none)"}"""
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    started = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(35.0, connect=8.0)) as client:
-            response = await client.post(
-                url,
-                headers={"x-goog-api-key": api_key},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "responseMimeType": "application/json",
-                        "responseSchema": schema,
-                    },
-                },
-            )
-    except httpx.TimeoutException:
-        raise HTTPException(504, "Gemini artifact generation timed out. Try a smaller task.")
-    except httpx.RequestError:
-        raise HTTPException(502, "Could not reach Gemini for artifact generation. Retry shortly.")
-
-    if response.status_code == 429:
-        raise HTTPException(429, "Gemini rate limit reached while generating artifacts. Retry later.")
-    if response.status_code >= 400:
-        # Do not log request headers, credentials, or provider response bodies.
-        print(f"Gemini artifact request failed: http_status={response.status_code}")
-        raise HTTPException(502, f"Gemini artifact generation failed (HTTP {response.status_code}).")
+        raw, provider_name = await generate_text(prompt, schema)
+    except ProviderUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    except (httpx.TimeoutException, httpx.RequestError):
+        raise HTTPException(504, "All configured AI providers timed out or could not be reached.")
 
     try:
-        raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
         data = _parse_json(raw)
         filename = _validate_filename(data["filename"])
         test_filename = _validate_filename(data["test_filename"], test=True)
@@ -143,7 +115,7 @@ CONTEXT:
     return {
         "artifact_id": f"artifact-{uuid.uuid4().hex[:12]}",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "provider": f"Google Gemini ({model})",
+        "provider": provider_name,
         "language": "python",
         "filename": filename,
         "code": code,
