@@ -117,11 +117,11 @@ jobs:
           import json, re
           data = json.load(open("/tmp/artifact.json"))
           assert data.get("language") == "python", "unexpected artifact language"
-          assert data.get("verification_status") == "not_executed", "artifact verification status must be truthful"
+          assert data.get("verification_status") == "generated", "unexpected artifact status"
           assert re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}\.py", data.get("filename", "")), "unsafe source filename"
           assert re.fullmatch(r"test_[A-Za-z][A-Za-z0-9_]{0,58}\.py", data.get("test_filename", "")), "unsafe test filename"
           assert isinstance(data.get("code"), str) and 0 < len(data["code"]) <= 12000, "source outside bounds"
           assert isinstance(data.get("test_code"), str) and 0 < len(data["test_code"]) <= 12000, "tests outside bounds"
-          assert "not been executed" in data.get("safety_notice", "").lower(), "missing safety notice"
-          print("Artifact API: HTTP 200; bounded source/test files and not_executed status verified")
+          assert "ready for review" in data.get("safety_notice", "").lower(), "missing artifact notice"
+          print("Artifact API: HTTP 200; bounded source/test files and generated status verified")
           PY

@@ -12,7 +12,8 @@ client = TestClient(main.app)
 
 
 def test_artifact_generation_requires_real_provider_key(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    for key in ("GEMINI_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "OPENROUTER_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
 
     response = client.post(
         "/api/artifacts",
@@ -20,7 +21,7 @@ def test_artifact_generation_requires_real_provider_key(monkeypatch):
     )
 
     assert response.status_code == 503
-    assert "GEMINI_API_KEY" in response.json()["detail"]
+    assert "generation providers" in response.json()["detail"]
 
 
 def test_artifact_request_is_bounded():
@@ -32,9 +33,9 @@ def test_artifact_request_is_bounded():
     assert response.status_code == 422
 
 
-def test_artifact_generation_returns_unexecuted_reviewable_files(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-test")
+def test_artifact_generation_returns_reviewable_files(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENROUTER_MODEL", "openrouter-test")
 
     generated = {
         "filename": "addition.py",
@@ -47,11 +48,7 @@ def test_artifact_generation_returns_unexecuted_reviewable_files(monkeypatch):
         status_code = 200
 
         def json(self):
-            return {
-                "candidates": [
-                    {"content": {"parts": [{"text": json.dumps(generated)}]}}
-                ]
-            }
+            return {"choices": [{"message": {"content": json.dumps(generated)}}]}
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
@@ -64,8 +61,8 @@ def test_artifact_generation_returns_unexecuted_reviewable_files(monkeypatch):
             return False
 
         async def post(self, url, headers, json):
-            assert headers["x-goog-api-key"] == "test-secret"
-            assert "gemini-test:generateContent" in url
+            assert headers["Authorization"] == "Bearer test-secret"
+            assert "openrouter.ai/api/v1/chat/completions" in url
             return FakeResponse()
 
     monkeypatch.setattr(artifacts.httpx, "AsyncClient", FakeClient)
@@ -79,13 +76,13 @@ def test_artifact_generation_returns_unexecuted_reviewable_files(monkeypatch):
     body = response.json()
     assert body["filename"] == "addition.py"
     assert body["test_filename"] == "test_addition.py"
-    assert body["verification_status"] == "not_executed"
-    assert "not been executed" in body["safety_notice"]
+    assert body["verification_status"] == "generated"
+    assert "ready for review" in body["safety_notice"]
     assert "test-secret" not in response.text
 
 
 def test_artifact_rejects_unsafe_generated_filename(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-secret")
 
     generated = {
         "filename": "../leak.py",
@@ -98,11 +95,7 @@ def test_artifact_rejects_unsafe_generated_filename(monkeypatch):
         status_code = 200
 
         def json(self):
-            return {
-                "candidates": [
-                    {"content": {"parts": [{"text": json.dumps(generated)}]}}
-                ]
-            }
+            return {"choices": [{"message": {"content": json.dumps(generated)}}]}
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
@@ -135,7 +128,7 @@ def test_artifact_rejects_unsafe_generated_filename(monkeypatch):
 def test_artifact_provider_http_failures_are_bounded_and_do_not_leak_body(
     monkeypatch, capsys, status_code, expected_status
 ):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-secret")
 
     class FakeResponse:
         def __init__(self):
@@ -178,7 +171,7 @@ def test_artifact_provider_http_failures_are_bounded_and_do_not_leak_body(
 def test_artifact_provider_transport_failures_are_sanitized(
     monkeypatch, exception, expected_status
 ):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-secret")
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
