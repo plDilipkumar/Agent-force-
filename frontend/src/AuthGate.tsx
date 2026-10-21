@@ -54,11 +54,11 @@ export default function AuthGate() {
     <section className="auth-hero">
       <div className="auth-brand"><span><Layers3 size={22}/></span><div><b>AgentForge</b><small>ENGINEERING WORKSPACE</small></div></div>
       <div className="auth-hero-content">
-        <span className="auth-eyebrow"><Sparkles size={14}/> YOUR AI ENGINEERING WORKSPACE</span>
+        <span className="auth-eyebrow"><Sparkles size={14}/> YOUR ENGINEERING WORKSPACE</span>
         <h1>Turn your ideas into <em>clear next steps.</em></h1>
-        <p>Plan projects, chat with Gemini, and generate reviewable code artifacts in one secure workspace.</p>
+        <p>Plan projects, chat through ideas, and generate code drafts in one focused workspace.</p>
         <div className="auth-benefit"><ShieldCheck size={17}/> Your account protects access to every AI feature.</div>
-        <div className="auth-benefit"><ShieldCheck size={17}/> OpenRouter and Cloudflare generation, Gemini chat.</div>
+        <div className="auth-benefit"><ShieldCheck size={17}/> A connected workspace for planning, chat, and code generation.</div>
       </div>
       <small className="auth-footnote">Built for clarity, control, and reviewable results.</small>
     </section>
@@ -67,7 +67,7 @@ export default function AuthGate() {
         <div className="auth-card-icon"><Layers3 size={21}/></div>
         <span className="auth-card-eyebrow">{mode === "login" ? "WELCOME BACK" : "GET STARTED"}</span>
         <h2>{mode === "login" ? "Sign in to AgentForge" : "Create your account"}</h2>
-        <p>{mode === "login" ? "Log in to continue to your AI workspace." : "Create an account to access AgentForge AI features."}</p>
+        <p>{mode === "login" ? "Sign in to continue to your workspace." : "Create an account to start using your workspace."}</p>
         <label htmlFor="auth-email">EMAIL ADDRESS</label>
         <input id="auth-email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com"/>
         <label htmlFor="auth-password">PASSWORD <span>At least 10 characters</span></label>
