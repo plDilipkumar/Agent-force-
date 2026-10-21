@@ -7,19 +7,27 @@ type Task = {title:string;description:string;priority:"P0"|"P1"|"P2";estimate:st
 type Artifact = {artifact_id:string;created_at:string;provider:string;language:"python";filename:string;code:string;test_filename:string;test_code:string;verification_status:"generated";safety_notice:string};
 type Plan = {id:string;created_at:string;provider:string;mode:string;summary:string;spec:string[];tasks:Task[];decisions:{title:string;rationale:string}[];risks:string[];verification:string[];assumptions:string[];notice:string;duration_ms:number};
 type SavedArtifact = Artifact & {id:string};
-function accountKey(){try{const token=localStorage.getItem("agentforge_token")||"";const payload=token.split(".")[1];if(!payload)return "guest";const normalized=payload.replace(/-/g,"+").replace(/_/g,"/");const claims=JSON.parse(atob(normalized));return String(claims.sub||claims.email||"account");}catch{return "account";}}
-function readSaved<T>(suffix:string):T[]{try{return JSON.parse(localStorage.getItem("agentforge:"+accountKey()+":"+suffix)||"[]") as T[];}catch{return [];}}
-function writeSaved<T>(suffix:string,items:T[]){try{localStorage.setItem("agentforge:"+accountKey()+":"+suffix,JSON.stringify(items));}catch{}}
+
 const API=(import.meta.env.VITE_API_BASE_URL||"http://localhost:8000").replace(/\/$/,"");
 const samples=[{label:"API platform",task:"Design a secure document upload API with validation, storage abstraction, and clear error handling.",context:"FastAPI backend, React frontend, PDF files up to 10 MB."},{label:"AI feature",task:"Build an AI-assisted code review workflow that identifies risky changes and produces actionable findings.",context:"GitHub pull request workflow; no execution of untrusted code."},{label:"SaaS workflow",task:"Create a multi-tenant task management service with role-based access and audit history.",context:"PostgreSQL persistence, REST API, reliable tests."}];
 function App(){
  const [task,setTask]=useState(samples[0].task),[context,setContext]=useState(samples[0].context),[stack,setStack]=useState("React + FastAPI"),[mode,setMode]=useState<"balanced"|"thorough">("balanced");
  const [plan,setPlan]=useState<Plan|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(""),[tab,setTab]=useState("Overview"),[history,setHistory]=useState<Plan[]>([]),[page,setPage]=useState("Home");
  const [artifact,setArtifact]=useState<Artifact|null>(null),[artifactLoading,setArtifactLoading]=useState(false),[artifactError,setArtifactError]=useState("");
- const [savedPlans,setSavedPlans]=useState<Plan[]>(()=>readSaved<Plan>("plans"));
- const [savedArtifacts,setSavedArtifacts]=useState<SavedArtifact[]>(()=>readSaved<SavedArtifact>("artifacts"));
- useEffect(()=>{writeSaved("plans",savedPlans);},[savedPlans]);
- useEffect(()=>{writeSaved("artifacts",savedArtifacts);},[savedArtifacts]);
+ const [savedPlans,setSavedPlans]=useState<Plan[]>([]);
+ const [savedArtifacts,setSavedArtifacts]=useState<SavedArtifact[]>([]);
+ useEffect(()=>{
+   let active=true;
+   apiFetch(API+"/api/saved-work").then(r=>{if(!r.ok)throw new Error("Could not load saved work");return r.json()}).then(data=>{
+     if(!active)return;
+     const plans:Plan[]=[]; const artifacts:SavedArtifact[]=[];
+     for(const item of (data.items||[])){if(item.item_type==="plan")plans.push(item.payload as Plan);else if(item.item_type==="artifact")artifacts.push({...item.payload,id:item.item_id} as SavedArtifact);}
+     setSavedPlans(plans);setSavedArtifacts(artifacts);
+   }).catch(()=>{if(active){setSavedPlans([]);setSavedArtifacts([]);}});
+   return ()=>{active=false};
+ },[]);
+ useEffect(()=>{for(const item of savedPlans){apiFetch(API+"/api/saved-work/plan/"+encodeURIComponent(item.id),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(item)}).catch(()=>{});}},[savedPlans]);
+ useEffect(()=>{for(const item of savedArtifacts){const id=item.artifact_id||item.id;apiFetch(API+"/api/saved-work/artifact/"+encodeURIComponent(id),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(item)}).catch(()=>{});}},[savedArtifacts]);
  const completed=useMemo(()=>plan?.verification.length??0,[plan]);
  async function run(){setLoading(true);setError("");setPlan(null);try{const res=await apiFetch(API+"/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task,context,stack,mode})});const body=await res.json();if(!res.ok)throw new Error(body.detail||"Could not generate a plan.");setPlan(body);setHistory(h=>[body,...h].slice(0,5));setSavedPlans(items=>[body,...items.filter(item=>item.id!==body.id)].slice(0,100));setTab("Overview");}catch(e){setError(e instanceof Error?e.message:"Could not reach AgentForge API. Check the API URL and try again.");}finally{setLoading(false)}}
  async function generateArtifact(){setArtifactLoading(true);setArtifactError("");setArtifact(null);try{const res=await apiFetch(API+"/api/artifacts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task,context})});const body=await res.json();if(!res.ok)throw new Error(body.detail||"Could not generate code artifacts.");setArtifact(body);setSavedArtifacts(items=>[{...body,id:body.artifact_id||String(Date.now())},...items.filter(item=>item.artifact_id!==body.artifact_id)].slice(0,100));}catch(e){setArtifactError(e instanceof Error?e.message:"Could not reach artifact generator.");}finally{setArtifactLoading(false)}}
