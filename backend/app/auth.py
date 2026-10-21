@@ -61,6 +61,10 @@ def _issue_token(user_id: int, email: str) -> str:
 def _read_token(token: str) -> dict:
     try:
         header, payload, signature = token.split(".")
+        header_data = json.loads(base64.urlsafe_b64decode(header + "=" * (-len(header) % 4)))
+        # Do not accept tokens that declare an unexpected algorithm or token type.
+        if not isinstance(header_data, dict) or header_data.get("alg") != "HS256" or header_data.get("typ") != "JWT":
+            raise ValueError("header")
         signing = f"{header}.{payload}".encode()
         expected = _b64(hmac.new(_secret(), signing, hashlib.sha256).digest())
         if not hmac.compare_digest(signature, expected):
