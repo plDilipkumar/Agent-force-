@@ -16,12 +16,29 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 app = FastAPI(title="AgentForge API", version=APP_VERSION, description="Structured AI engineering workflow API")
-from .auth import router as auth_router, init_auth_db, close_auth_db, require_user
+from .auth import router as auth_router, init_auth_db, close_auth_db, require_user, get_pool
+from .saved_work import router as saved_work_router
 app.include_router(auth_router)
+app.include_router(saved_work_router)
 
 @app.on_event("startup")
 async def startup_auth_storage() -> None:
     await init_auth_db()
+    if os.getenv("AGENTFORGE_TESTING") != "1":
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS agentforge_saved_work (
+                    user_id BIGINT NOT NULL REFERENCES agentforge_users(id) ON DELETE CASCADE,
+                    item_id TEXT NOT NULL,
+                    item_type TEXT NOT NULL CHECK (item_type IN ('plan', 'artifact')),
+                    payload JSONB NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (user_id, item_id, item_type)
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_agentforge_saved_work_user_updated ON agentforge_saved_work(user_id, updated_at DESC)")
 
 @app.on_event("shutdown")
 async def shutdown_auth_storage() -> None:
