@@ -22,7 +22,7 @@ def test_provider_failover_after_gemini_timeout(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
     calls = []
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         calls.append(provider)
         if provider == "openrouter":
             raise httpx.ReadTimeout("do not leak this")
@@ -49,7 +49,7 @@ def test_provider_failover_after_malformed_json(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
     calls = []
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         calls.append(provider)
         if provider == "openrouter":
             return "not json", "OpenRouter (test)"
@@ -69,7 +69,7 @@ def test_multi_agent_merges_independent_provider_outputs(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "o")
     calls = []
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         calls.append((provider, prompt))
         payload = {
             "summary": provider + " summary",
@@ -101,7 +101,7 @@ def test_multi_agent_discards_invalid_worker_and_keeps_valid_result(monkeypatch)
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
     monkeypatch.setenv("OPENROUTER_API_KEY", "o")
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         if provider == "cloudflare":
             return json.dumps({"summary": "bad but incomplete"}), "Cloudflare"
         payload = {
@@ -134,7 +134,7 @@ def test_multi_agent_discards_worker_with_invalid_priority(monkeypatch):
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
     monkeypatch.setenv("OPENROUTER_API_KEY", "o")
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         payload = {
             "summary": "invalid priority", "spec": ["spec"],
             "tasks": [{"title": "task", "description": "detail", "priority": "urgent", "estimate": "1h"}],
@@ -155,7 +155,7 @@ def test_provider_http_failures_are_sanitized(monkeypatch, status_code, expected
     monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-test-key")
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         raise RuntimeError("secret-test-key upstream detail", status_code)
 
     monkeypatch.setattr(providers, "_request", fake_request)
@@ -172,7 +172,7 @@ def test_multi_agent_failure_logs_only_safe_provider_category(monkeypatch, capsy
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
     monkeypatch.setenv("OPENROUTER_API_KEY", "o")
 
-    async def fake_request(provider, prompt, schema):
+    async def fake_request(provider, prompt, schema, **kwargs):
         raise httpx.ReadTimeout("secret-test-key and private response detail")
 
     monkeypatch.setattr(providers, "_request", fake_request)
@@ -231,3 +231,28 @@ def test_openai_style_providers_receive_json_constraints(monkeypatch, provider):
     assert "summary" in captured["body"]["messages"][0]["content"]
     assert captured["body"]["temperature"] == 0.1
     assert captured["body"]["max_tokens"] == 4096
+
+
+def test_gemini_review_uses_bounded_configurable_timeout(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "c")
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "a")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
+    monkeypatch.setenv("AI_PROVIDER_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("AI_REVIEW_TIMEOUT_SECONDS", "12")
+    review_timeouts = []
+
+    async def fake_request(provider, prompt, schema, **kwargs):
+        if provider == "gemini":
+            review_timeouts.append(kwargs.get("timeout_seconds"))
+        payload = {
+            "summary": provider + " summary", "spec": ["spec"],
+            "tasks": [{"title": "task", "description": "detail", "priority": "P1", "estimate": "1h"}],
+            "decisions": [{"title": "decision", "rationale": "reason"}],
+            "risks": ["risk"], "verification": ["check"], "assumptions": ["assumption"],
+        }
+        return json.dumps(payload), provider + " provider"
+
+    monkeypatch.setattr(providers, "_request", fake_request)
+    asyncio.run(providers.generate_multi_agent_text("base prompt", {"type": "OBJECT"}))
+    assert review_timeouts == [12.0]
