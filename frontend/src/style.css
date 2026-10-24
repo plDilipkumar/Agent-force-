@@ -190,6 +190,7 @@
 .nav-backdrop{display:none}
 @media(max-width:760px){
  .mobile-menu-button{display:inline-flex}
+ .sidebar{display:flex!important}
  .topbar{gap:10px}
  .crumb{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .sidebar{position:fixed!important;inset:0 auto 0 0;width:min(82vw,310px)!important;max-width:310px;z-index:1200;transform:translateX(-105%);transition:transform .24s ease;box-shadow:18px 0 55px #0005;overflow-y:auto;overscroll-behavior:contain}
